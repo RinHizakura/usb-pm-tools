@@ -32,13 +32,13 @@ cleanup ()
 	fi
 	# Always put the parent roothub back in the state we found it in.
 	if [ -e "$PARENT" -a "$OLD_PARENT_LEVEL" != "" ]; then
-		echo $OLD_PARENT_LEVEL > "$PARENT/power/level"
+		echo $OLD_PARENT_LEVEL > "$PARENT/power/control"
 	fi
 	# If the test failed and the device is still connected,
 	# put it back in the state we found it.
 	if [ "$TEST_SUCCESS" = "0" -a -d "$SYSFS_DIR" -a "$OLD_LEVEL" != "" ]; then
 		echo $OLD_WAIT > "$SYSFS_DIR/power/autosuspend"
-		echo $OLD_LEVEL > "$SYSFS_DIR/power/level"
+		echo $OLD_LEVEL > "$SYSFS_DIR/power/control"
 	fi
 	# If the device disconnected when it was told to auto-suspend,
 	# or the user reports it's unusable, record that for later use.
@@ -157,16 +157,18 @@ do
 	# Do all the interface drivers support autosuspend?
 	SUPPORTED=1
 	NO_PM_DRIVERS=""
+
+	if [ ! -f "$SYSFS_DIR/power/active_duration" ]; then
+		echo "This test will only run on Linux kernel version 2.6.25 or greater."
+		clear_dev_info
+		exit -1
+	fi
+
 	for f in `find "$SYSFS_DIR/" -name '[0-9]*-[0-9]*:*'`;
 	do
 		if [ ! -d "$f/power" ]; then
 			echo "This test cannot run without Linux kernel support for selective suspend."
 			echo "Please enable CONFIG_USB_SUSPEND and recompile your kernel."
-			clear_dev_info
-			exit -1
-		fi
-		if [ ! -d "$f/power/active_duration" ]; then
-			echo "This test will only run on Linux kernel version 2.6.25 or greater."
 			clear_dev_info
 			exit -1
 		fi
@@ -251,7 +253,7 @@ TEST_DEV=`head -n $devnum $PM_DEVS_FILE | tail -n 1`
 get_dev_info
 
 # Does the user have CONFIG_USB_PM enabled?  I.e. is the power directory and
-# level file there?  Suggest they also have CONFIG_USB_DEBUG turned on.
+# control file there?  Suggest they also have CONFIG_USB_DEBUG turned on.
 if [ ! -d "$SYSFS_DIR"/power ]; then
 	echo 'ERROR: CONFIG_USB_PM must be enabled in your kernel'
 	exit -1
@@ -277,27 +279,27 @@ fi
 # For cleanup later
 # TODO: reset the files to the old values after testing the device.
 OLD_WAIT=`cat "$SYSFS_DIR/power/autosuspend"`
-OLD_LEVEL=`cat "$SYSFS_DIR/power/level"`
+OLD_LEVEL=`cat "$SYSFS_DIR/power/control"`
 # Find the roothub that is the ancestor of the device in the tree.
 PARENT="/sys/bus/usb/devices/usb$BUSNUM"
-OLD_PARENT_LEVEL=`cat "$PARENT/power/level"`
+OLD_PARENT_LEVEL=`cat "$PARENT/power/control"`
 
-# TODO: set the parent hub or roothub's level to on
+# TODO: set the parent hub or roothub's control to on
 # take activity time stamps for both device and parent hub,
-# after setting the device level to off and waiting 2 seconds.
+# after setting the device control to off and waiting 2 seconds.
 # sleep a short amount of time and sample again.
 # Compare the difference between the parent (who we know is on)
 # and the device (which should be autosuspended by now).
 # If the delta activities are the same, then we know the device didn't autosuspend.
 
-# Set level file to auto and monitor the activity using active_duration.
+# Set control file to auto and monitor the activity using active_duration.
 echo -n "Enabling auto-suspend.  "
 # Don't want to wait too long...
 echo 1 > "$SYSFS_DIR/power/autosuspend"
 # Force the roothub to stay active to provide a time delta to compare against.
-echo "on" > "$PARENT/power/level"
+echo "on" > "$PARENT/power/control"
 # Turn on auto-suspend for the device under test.
-echo "auto" > "$SYSFS_DIR/power/level"
+echo "auto" > "$SYSFS_DIR/power/control"
 echo "Waiting for device activity to cease..."
 echo
 
